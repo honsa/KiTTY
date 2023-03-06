@@ -14,8 +14,9 @@
 // Includes de PuTTY
 #include "putty.h"
 #include "terminal.h"
-#include "ldisc.h"
-#include "win_res.h"
+//#include "ldisc.h"
+//#include "win_res.h"
+#include "putty-rc.h"
 
 // Include specifiques Windows (windows.h doit imperativement etre declare en premier)
 #include <windows.h>
@@ -462,6 +463,7 @@ static struct TShortcuts {
 	int opennewcurrent ;
 	int changesettings ;
 	int clearscrollback ;
+	int clearlogfile ;
 	int closerestart ;
 	int eventlog ;
 	int fullscreen ;
@@ -1925,39 +1927,42 @@ void RunSessionWithCurrentSettings( HWND hwnd, Conf *conf, const char * host, co
 //SendMessage( hwnd, WM_SETICON, ICON_SMALL, (LPARAM)LoadIcon( hInstIcons, MAKEINTRESOURCE(IDI_MAINICON_0 + IconeNum ) ) );
 void SetNewIcon( HWND hwnd, char * iconefile, int icone, const int mode ) {
 	
-	HICON hIcon = NULL ;
-	if( (strlen(iconefile)>0) && existfile(iconefile) ) { 
-		hIcon = LoadImage(NULL, iconefile, IMAGE_ICON, 32, 32, LR_LOADFROMFILE|LR_SHARED) ; 
-		}
+	HICON hIcon = NULL, hIconBig = NULL ;
+	if( (strlen(iconefile)>0) && existfile(iconefile) ) {
+		hIcon = LoadImage(NULL, iconefile, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE|LR_SHARED) ; 
+		hIconBig = LoadImage(NULL, iconefile, IMAGE_ICON, 0, 0, LR_LOADFROMFILE|LR_SHARED|LR_DEFAULTSIZE) ; 
+	}
 
-	if(hIcon) {
-		SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon) ; 
+	if( hIcon || hIconBig ) {
+		if(!hIcon) hIcon = hIconBig ;
+		if(!hIconBig) hIconBig = hIcon ;
+		SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig) ; 
 		SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon) ;
 		TrayIcone.hIcon = hIcon ;
 		//DeleteObject( hIcon ) ; 
-		}
-	else {
-	if( mode == SI_INIT ) {
-		if( icone!=0 ) IconeNum = icone - 1 ;
-		hIcon = LoadIcon( hInstIcons, MAKEINTRESOURCE(IDI_MAINICON_0 + IconeNum ) ) ;
-		SendMessage( hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon );
-		SendMessage( hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon );
-		TrayIcone.hIcon = hIcon ;
-		}
-	else {
-		if( IconeFlag==0 ) return ;
-		if( IconeFlag <= 0 ) { IconeNum = 0 ; } 
-		else {
-			if( mode == SI_RANDOM ) { 
-				SYSTEMTIME st ;
-				GetSystemTime( &st ) ;
-				IconeNum = ( GetCurrentProcessId() * time( NULL ) ) % NumberOfIcons ; 
-			} else { IconeNum++ ; if( IconeNum >= NumberOfIcons ) IconeNum = 0 ; }
+	} else {
+		if( mode == SI_INIT ) {
+			if( icone!=0 ) IconeNum = icone - 1 ;
+			hIcon = LoadIcon( hInstIcons, MAKEINTRESOURCE(IDI_MAINICON_0 + IconeNum ) ) ;
+			SendMessage( hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon );
+			SendMessage( hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon );
+			TrayIcone.hIcon = hIcon ;
+		} else {
+			if( IconeFlag==0 ) return ;
+			if( IconeFlag <= 0 ) { IconeNum = 0 ; 
+			} else {
+				if( mode == SI_RANDOM ) { 
+					SYSTEMTIME st ;
+					GetSystemTime( &st ) ;
+					IconeNum = ( GetCurrentProcessId() * time( NULL ) ) % NumberOfIcons ; 
+				} else { 
+					IconeNum++ ; if( IconeNum >= NumberOfIcons ) IconeNum = 0 ; 
+				}
 			}
-		hIcon = LoadIcon( hInstIcons, MAKEINTRESOURCE(IDI_MAINICON_0 + IconeNum ) ) ;
-		SendMessage( hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon );	
-		SendMessage( hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon );
-		TrayIcone.hIcon = hIcon ;
+			hIcon = LoadIcon( hInstIcons, MAKEINTRESOURCE(IDI_MAINICON_0 + IconeNum ) ) ;
+			SendMessage( hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon );	
+			SendMessage( hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon );
+			TrayIcone.hIcon = hIcon ;
 		}
 	}
 	Shell_NotifyIcon(NIM_MODIFY, &TrayIcone);
@@ -2578,7 +2583,7 @@ int ManageLocalCmd( HWND hwnd, const char * cmd ) {
 	} else if( (cmd[0]=='p')&&(cmd[1]=='l')&&(cmd[2]==':') ) { // __pl: Lance une commande plink
 		RunExternPlink( hwnd, cmd+3 ) ;
 		return 1 ;
-	} else if( (cmd[0]=='t')&&(cmd[1]=='i')&&(cmd[2]=='\0') ) { // __ti: Recuperation du titre de la fenetres
+	} else if( (cmd[0]=='t')&&(cmd[1]=='i')&&(cmd[2]=='\0') ) { // __ti: Recuperation du titre de la fenetre
 		GetWindowText( hwnd, buffer, 1024 ) ;
 		sprintf( title, "printf \"\\033]0;%s\\007\"\n", buffer ) ;
 		SendStrToTerminal( title, strlen(title) ) ;
@@ -4965,6 +4970,8 @@ void InitShortcuts( void ) {
 		shortcuts_tab.changesettings = 0 ;
 	if( !readINI(KittyIniFile,"Shortcuts","clearscrollback",buffer) || ( (shortcuts_tab.clearscrollback=DefineShortcuts(buffer))<0 ) )
 		shortcuts_tab.clearscrollback = 0 ;
+	if( !readINI(KittyIniFile,"Shortcuts","clearlogfile",buffer) || ( (shortcuts_tab.clearlogfile=DefineShortcuts(buffer))<0 ) )
+		shortcuts_tab.clearlogfile = 0 ;
 	if( !readINI(KittyIniFile,"Shortcuts","closerestart",buffer) || ( (shortcuts_tab.closerestart=DefineShortcuts(buffer))<0 ) )
 		shortcuts_tab.closerestart = 0 ;
 	if( !readINI(KittyIniFile,"Shortcuts","eventlog",buffer) || ( (shortcuts_tab.eventlog=DefineShortcuts(buffer))<0 ) )
@@ -5124,6 +5131,8 @@ int ManageShortcuts( Terminal *term, Conf *conf, HWND hwnd, const int* clips_sys
 		{ SendMessage( hwnd, WM_COMMAND, IDM_RECONF, 0 ) ; return 1 ; }
 	else if( key == shortcuts_tab.clearscrollback )		// Clear scrollback
 		{ SendMessage( hwnd, WM_COMMAND, IDM_CLRSB, 0 ) ; return 1 ; }
+	else if( key == shortcuts_tab.clearlogfile )		// Clear log file
+		{ SendMessage( hwnd, WM_COMMAND, IDM_CLEARLOGFILE, 0 ) ; return 1 ; }
 	else if( key == shortcuts_tab.closerestart )		// Close + restart
 		{ SendMessage( hwnd, WM_COMMAND, IDM_RESTARTSESSION, 0 ) ; return 1 ; }
 	else if( key == shortcuts_tab.eventlog )		// Event log
@@ -5700,6 +5709,10 @@ void WriteCountUpAndPath( void ) ;
 
 // Initialisation spécifique a KiTTY
 void InitWinMain( void ) ;
+
+// Initialisation des shortcuts
+void InitShortcuts( void ) ;
+int DefineShortcuts( char * buf ) ;
 
 // Gestion de commandes a distance
 int ManageLocalCmd( HWND hwnd, const char * cmd ) ;

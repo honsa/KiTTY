@@ -1369,6 +1369,9 @@ static void power_on(Terminal *term, bool clear)
     term->savecurs.x = term->savecurs.y = 0;
     term->alt_savecurs.x = term->alt_savecurs.y = 0;
     term->alt_t = term->marg_t = 0;
+#ifdef MOD_FAR2L
+    term->far2l_ext = 0;
+#endif
     if (term->rows != -1)
 	term->alt_b = term->marg_b = term->rows - 1;
     else
@@ -3042,7 +3045,11 @@ static void insch(Terminal *term, int n)
 
 static void term_update_raw_mouse_mode(Terminal *term)
 {
+#ifdef MOD_PERSO
+    bool want_raw = (term->xterm_mouse_mode && !term->xterm_mouse_forbidden);
+#else
     bool want_raw = (term->xterm_mouse != 0 && !term->xterm_mouse_forbidden);
+#endif
     win_set_raw_mouse_mode(term->win, want_raw);
     term->win_pointer_shape_pending = true;
     term->win_pointer_shape_raw = want_raw;
@@ -3292,6 +3299,9 @@ static void do_osc(Terminal *term)
                 }
 
                 DWORD len;
+#ifdef MOD_FAR2L
+		DWORD zero = 0;
+#endif
 
                 // next from the end byte is command
                 switch (d_out[d_count-2]) {
@@ -3301,8 +3311,10 @@ static void do_osc(Terminal *term)
                         reply_size = 5;
                         reply = malloc(reply_size);
 
+#ifndef MOD_FAR2L
                         // fixme: unimplemented
                         DWORD zero = 0;
+#endif
 
                         memcpy(reply, &zero, sizeof(DWORD));
 
@@ -3711,6 +3723,27 @@ static void do_osc(Terminal *term)
 
                                 break;
                         }
+#ifdef MOD_FAR2L
+                        break;
+                    case 'p':
+
+                        reply_size = 3; // reserved byte, bits byte, id byte
+                        reply = malloc(reply_size);
+
+                        reply[0] = 0;
+                        reply[1] = 24;
+
+                        break;
+
+                    default:
+
+                        // not implemented
+
+                        reply_size = 5;
+                        reply = malloc(reply_size);
+
+                        memcpy(reply, &zero, sizeof(DWORD));
+#endif
 
                         break;
                 }

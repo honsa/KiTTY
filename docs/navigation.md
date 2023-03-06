@@ -23,6 +23,7 @@
   * [Automatic command](pages/AutomaticCommand.md)
   * [Force CR/LF on enter key](pages/ForceCRLF.md)
   * [Running a locally saved script on a remote session](pages/LocalScript.md)
+  * [Standard output to clipboard](pages/StdoutToClipboard.md)
 
 [Graphical]()
 
@@ -48,6 +49,7 @@
   ----
   * [Menu key shortcuts definition](pages/MenuShortcuts.md)
   * [New command-line options](pages/CommandLine.md)
+  * [Default kitty.ini configuration file](https://github.com/cyd01/KiTTY/blob/master/kitty_ini.txt)
 
 [Bonus]()
 

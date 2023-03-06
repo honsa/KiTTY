@@ -260,6 +260,7 @@ void SaveDump( void ) ;
 #include <sys/types.h>
 #include <process.h>
 #include <math.h>
+extern HWND MainHwnd ;
 #include "../../kitty.h"
 #include "../../kitty_commun.h"
 #include "../../kitty_crypt.h"
@@ -453,8 +454,8 @@ static time_t last_reconnect = 0;
 void SetConnBreakIcon( HWND hwnd ) ;
 static void close_session(void *ignored_context);
 #endif
-/* rutty: */
 #ifdef MOD_RUTTY
+/* rutty: */
 #define IDM_SCRIPT (0x5100)
 #define IDM_SCRIPTSEND (0x5110)
 #define IDM_SCRIPTHALT (0x5120)
@@ -463,9 +464,10 @@ static void close_session(void *ignored_context);
 ScriptData scriptdata; 
 
 #include "script_win.c" 
+#include "script_ahk.c" 
 #include "script.c" 
-
-#endif  /* rutty */  
+/* rutty */  
+#endif
 #ifdef MOD_PROXY
 #include "kitty_proxy.h"
 #endif
@@ -584,6 +586,10 @@ static StripCtrlChars *win_seat_stripctrl_new(
 
 static size_t win_seat_output(
     Seat *seat, bool is_stderr, const void *, size_t);
+#ifdef MOD_RUTTY
+/* rutty */
+size_t win_seat_output_local(Seat *seat, bool is_stderr, const void *, size_t);
+#endif
 static bool win_seat_eof(Seat *seat);
 static int win_seat_get_userpass_input(
     Seat *seat, prompts_t *p, bufchain *input);
@@ -597,6 +603,9 @@ static bool win_seat_get_window_pixel_size(Seat *seat, int *x, int *y);
 
 static const SeatVtable win_seat_vt = {
     .output = win_seat_output,
+#ifdef MOD_RUTTY
+    .output_local = win_seat_output_local,  /* rutty */
+#endif
     .eof = win_seat_eof,
     .get_userpass_input = win_seat_get_userpass_input,
     .notify_remote_exit = win_seat_notify_remote_exit,
@@ -728,14 +737,15 @@ static void start_backend(void)
     }
 
     session_closed = false;
-/* rutty: */
 #ifdef MOD_RUTTY
+/* rutty: */
     script_init(&scriptdata, conf);
     if(conf_get_int(conf, CONF_script_mode) == SCRIPT_PLAY && !filename_is_null(conf_get_filename(conf, CONF_script_filename)))
       script_sendfile(&scriptdata, conf_get_filename(conf, CONF_script_filename));
 	else if(conf_get_int(conf, CONF_script_mode) == SCRIPT_RECORD && !filename_is_null(conf_get_filename(conf, CONF_script_filename)))
       script_record(&scriptdata, conf_get_filename(conf, CONF_script_filename));
-#endif  /* rutty */
+/* rutty */
+#endif
 
 }
 
@@ -787,7 +797,10 @@ void RestartSession( void ) {
 		win_seat_connection_fatal(  &wgs.seat, "User request session restart..." ) ;
 		SetTimer(wgs.term_hwnd, TIMER_RECONNECT, 10, NULL) ;
 	}
-	
+
+#ifdef MOD_FAR2L
+    term->far2l_ext = 0;
+#endif	
 	PostMessage(wgs.term_hwnd,WM_KEYDOWN,VK_RETURN ,0) ;
 	PostMessage(wgs.term_hwnd,WM_KEYUP,VK_RETURN ,1) ;
 }
@@ -1673,11 +1686,12 @@ TrayIcone.hWnd = wgs.term_hwnd ;
 #ifdef MOD_PERSO
 		if( !PuttyFlag ) InitSpecialMenu( m, conf_get_str(conf,CONF_folder), conf_get_str(conf,CONF_sessionname) ) ;
 #endif
-/* rutty: */
 #ifdef MOD_RUTTY 
+/* rutty: */
         AppendMenu(m, MF_ENABLED, IDM_SCRIPTSEND, "Send recorded &script file" ) ;
         AppendMenu(m, MF_SEPARATOR, 0, 0);
-#endif /* rutty */  
+/* rutty */
+#endif
 	    AppendMenu(m, MF_ENABLED, IDM_SHOWLOG, "&Event Log");
 #ifdef MOD_PERSO
 	AppendMenu(m, MF_ENABLED, IDM_EXPORTSETTINGS, "Export &current settings" ) ;
@@ -3744,7 +3758,8 @@ else if((UINT_PTR)wParam == TIMER_LOGROTATION) {  // log rotation
 		  }
 		}
 		else
-#endif /* rutty */
+/* rutty */
+#endif
 	    if ( !conf_get_bool(conf,CONF_warn_on_close) || session_closed ||
 		MessageBox(hwnd,
 			   "Are you sure you want to close this session?",
@@ -4265,8 +4280,8 @@ free(cmd);
 	  case IDM_ABOUT:
 	    showabout(hwnd);
 	    break;
-/* rutty: */
 #ifdef MOD_RUTTY
+/* rutty: */
 	  case IDM_SCRIPTHALT:
 		script_close(&scriptdata);
 		lp_eventlog(&wgs.logpolicy, "script stopped");
@@ -4284,7 +4299,8 @@ free(cmd);
       }
      } 
 	   break;
-#endif  /* rutty */
+/* rutty */
+#endif
 #ifdef MOD_PERSO
 	  case IDM_NEWDUPSESS:
 		conf_set_str( conf, CONF_host_alt, conf_get_str( conf, CONF_host ) ) ;
@@ -4540,6 +4556,28 @@ free(cmd);
 	break;
 	
 	case WM_COPYDATA: {  // Reception d'un de donnees dans un message
+#ifdef MOD_RUTTY
+       COPYDATASTRUCT *cds;
+       cds = (COPYDATASTRUCT *) lParam;
+       if (cds->dwData == ruttyAHK_send)
+       {
+         script_ahk_send(&scriptdata, cds);
+         return 1;
+       }  
+       else if (cds->dwData == ruttyAHK_enable)
+       {
+         script_ahk_enable(cds);
+         return 1;
+       }  
+       else if (cds->dwData == ruttyAHK_set)
+       {
+         script_ahk_set(cds);
+         return 1;
+       }  
+       else  
+         return 0;  /* not our message */
+    } 
+#else
 		PCOPYDATASTRUCT pMyCDS = (PCOPYDATASTRUCT) lParam;
 			switch( pMyCDS->dwData ) {	
 				case 1: // Reception d'une chaine de caracteres a envoyer dans le terminal
@@ -4549,6 +4587,7 @@ free(cmd);
 					break ;
 			}
 		}
+#endif
 	break ;
 
 #endif
@@ -5661,8 +5700,8 @@ if( (GetKeyState(VK_MENU)&0x8000) && (wParam==VK_SPACE) ) {
         // shift keys. But PuTTY is not a console app, so why not to send
         // all information about control keys state that we actually have here?
         // Using bits not used by any other status for backward compatibility.
-        #define RIGHT_SHIFT_PRESSED 0x1000
-        #define LEFT_SHIFT_PRESSED 0x2000
+        #define RIGHT_SHIFT_PRESSED 0x0400
+        #define LEFT_SHIFT_PRESSED 0x0200
         if (GetAsyncKeyState(VK_LSHIFT)) { ctrl |= RIGHT_SHIFT_PRESSED; }
         if (GetAsyncKeyState(VK_RSHIFT)) { ctrl |= LEFT_SHIFT_PRESSED; }
         // end
@@ -5726,13 +5765,15 @@ if( (GetKeyState(VK_MENU)&0x8000) && (wParam==VK_SPACE) ) {
 
         // send escape seq
 
-        char* str = "\x1b_f2l";
-        backend_send(backend, str, strlen(str));
+       if (backend) {
+		char* str = "\x1b_f2l";
+        	backend_send(backend, str, strlen(str));
 
-        backend_send(backend, out, count);
+		backend_send(backend, out, count);
 
-        char* str2 = "\x07";
-        backend_send(backend, str2, strlen(str2));
+		char* str2 = "\x07";
+        	backend_send(backend, str2, strlen(str2));
+	}
 
         // don't forget to free memory :)
         free(out);
@@ -7730,7 +7771,7 @@ static void wintw_set_title(TermWin *tw, const char *title_in) {
 	char *title ;
 
 	if( title_in==NULL ) { return ; }
-	title = (char*)malloc(strlen(title_in)+1); strcpy(title,title_in);
+	title = (char*)malloc(strlen(title_in)+1024); strcpy(title,title_in);
 
 	if( (title[0]=='_')&&(title[1]=='_') ) { // Mode commande a distance
 		if( ManageLocalCmd( MainHwnd, title+2 ) ) { free(title); return ; }
@@ -7742,11 +7783,11 @@ static void wintw_set_title(TermWin *tw, const char *title_in) {
 		{ title[strlen(title)-12]='\0' ; }
 
 #if (defined MOD_BACKGROUNDIMAGE) && (!defined FLJ)
-	buffer = (char*) malloc( strlen( title ) + strlen( conf_get_str(conf,CONF_host)) + strlen( conf_get_filename(conf,CONF_bg_image_filename)->path ) + 40 ) ; 
+	buffer = (char*) malloc( strlen( title ) + strlen( conf_get_str(conf,CONF_host)) + strlen( conf_get_filename(conf,CONF_bg_image_filename)->path ) + 4096 ) ; 
 	if( GetBackgroundImageFlag() && GetImageViewerFlag() && (!PuttyFlag) ) { sprintf( buffer, "%s", conf_get_filename(conf,CONF_bg_image_filename)->path ) ; }
 	else 
 #else
-	buffer = (char*) malloc( strlen( title ) + strlen( conf_get_str(conf,CONF_host)) + 40 ) ; 
+	buffer = (char*) malloc( strlen( title ) + strlen( conf_get_str(conf,CONF_host)) + 4096 ) ; 
 #endif
 	if( GetSizeFlag() && (!IsZoomed( MainHwnd )) ) {
 		if( strlen( title ) > 0 ) {
@@ -7779,7 +7820,7 @@ static void wintw_set_title(TermWin *tw, const char *title_in) {
 	
 static void wintw_set_icon_title(TermWin *tw, const char *title2)
 {
-	char title[1024]="",buf[512]=""; ;
+	char title[4096]="",buf[512]=""; ;
 	int i=0;
 	do { buf[i]=title2[i]; i++ ; }
 	while ( (i<511)&&(title2[i]!='\0') ) ;
